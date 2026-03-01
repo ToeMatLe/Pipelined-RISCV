@@ -1,0 +1,4 @@
+module Hazard_Detection_Unit (
+    
+);
+endmodule
