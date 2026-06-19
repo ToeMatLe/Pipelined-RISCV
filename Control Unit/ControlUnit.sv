@@ -9,6 +9,7 @@ module ControlUnit (
     // Enablers for register file and data memory
     output logic regWrite,
     output logic memWrite,
+    output logic memRead,
     // Register or immediate to ALU
     output logic aluSrc,
     // Branch Enable for Program Counter
@@ -24,10 +25,11 @@ always_comb begin
     // default values
     regWrite = 1'b0;
     memWrite = 1'b0;
+    memRead = 1'b0;
     aluSrc = 1'b0;
     branEnable = 1'b0;
     jumpEnable = 1'b0;
-    aluOp = ADD // Default now is to ADD, 4'b0000;
+    aluOp = ADD; // Default now is to ADD, 4'b0000
 
     case (opcode)
         R: begin 
@@ -72,6 +74,7 @@ always_comb begin
         LOAD: begin
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
+            memRead = 1'b1; // enable memory read
             aluSrc = 1'b1; // second ALU operand from immediate
             branEnable = 1'b0; // disable branch
             aluOp = ADD; // address calculation
