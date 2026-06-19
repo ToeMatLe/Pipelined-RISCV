@@ -37,9 +37,3 @@ typedef enum logic [2:0] {
 } branchTypes;
 `endif
 
-typedef enum logic [1:0] {
-    SEQ = 2'b00, // Sequential (PC + 4)
-    JUMP = 2'b01, // Jump target address
-    BRANCH = 2'b10 // Branch target address
-    STALL = 2'b11 // Stall (hold current PC)
-} addressingMode;

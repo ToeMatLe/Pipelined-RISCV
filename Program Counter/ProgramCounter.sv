@@ -18,13 +18,15 @@ logic [31:0] nextPC;
 // Jump > Branch > Sequential priority
 // If BranchEnable, go to the branch address, if not skip 4 to go to the next instruction
 always_comb begin
-    case (addressingMode)
-        SEQ: nextPC = currentPCAddress + 4;
-        JUMP: nextPC = jump_target_address;
-        BRANCH: nextPC = branAddress;
-        STALL: nextPC = currentPCAddress; // Hold the current PC address
-        default: nextPC = currentPCAddress + 4; // Default to sequential
-    endcase
+    if (stall) begin
+        nextPC = currentPCAddress; // Stall takes highest priority
+    end else if (jump_enable) begin
+       nextPC = jump_target_address;
+    end else if (branEnable) begin
+        nextPC = branAddress;
+    end else begin
+        nextPC = currentPCAddress + 4;
+    end
 end
 
 // Resetter, in between clock cycles, combinational logic determines next PC address

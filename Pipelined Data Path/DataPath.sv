@@ -37,14 +37,14 @@ assign flush_IFID = redirect_EX; // On redirect, we need to flush IF/ID to preve
 ProgramCounter programCounter (
     .clk(clk),
     .reset_n(reset_n),
-    
+
     .jump_enable(jump_taken_EX),
     .branEnable(branch_taken_EX),
     .branAddress(branch_target_EX),
     .jump_target_address(jump_target_EX),
 
     .outputPCAddress(pcAddress_IF),
-    .stall(stall_IF),                   // New stall support
+    .stall(stall_IF)                   // New stall support
 );
 
 // Instruction memory 
@@ -61,16 +61,17 @@ logic [31:0] IFID_instruction;
 
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
-        IFID_pcAddress <= 32'b0;
+        IFID_pcAddress   <= 32'b0;
         IFID_pcAddress_4 <= 32'b0;
-        IFID_instruction <= 32'h0000_0013; // NOP = addi x0,x0,0. Never insert garbage instruction on reset. This is for I-type instructions
+        IFID_instruction <= 32'h0000_0013;
+    end else if (flush_IFID) begin // flush is synchronous and reset is asynchronous
+        IFID_pcAddress   <= 32'b0;
+        IFID_pcAddress_4 <= 32'b0;
+        IFID_instruction <= 32'h0000_0013;
     end else if (!stall_IF) begin
-        IFID_pcAddress <= pcAddress_IF;
+        IFID_pcAddress   <= pcAddress_IF;
         IFID_pcAddress_4 <= pcAddress_4_IF;
-        if (flush_IFID)
-            IFID_instruction <= 32'h0000_0013; // kill wrong-path instruction
-        else
-            IFID_instruction <= instruction_IF;
+        IFID_instruction <= instruction_IF;
     end
 end
 
