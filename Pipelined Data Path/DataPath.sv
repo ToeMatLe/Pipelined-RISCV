@@ -34,22 +34,17 @@ logic [31:0] jump_target_EX;
 logic branch_taken_EX;
 logic [31:0] branch_target_EX;
 
-assign redirect_EX = jump_taken_EX | branch_taken_EX; //Both shouldnt happen at the same time (CAN DEFINE PRIORITY LATER)
 assign flush_IFID = redirect_EX; // On redirect, we need to flush IF/ID to prevent wrong instruction from being decoded
 
 // Program Counter
-// We drive jump_enable/branEnable/targets from EX stage.
+// A taken branch or jump redirects the PC to the target calculated in EX.
 ProgramCounter programCounter (
     .clk(clk),
     .reset_n(reset_n),
-
-    .jump_enable(jump_taken_EX),
-    .branEnable(branch_taken_EX),
-    .branAddress(branch_target_EX),
-    .jump_target_address(jump_target_EX),
-
+    .redirect(redirect_EX),
+    .redirect_target(redirect_target_EX),
     .outputPCAddress(pcAddress_IF),
-    .stall(stall_IF)                   // New stall support
+    .stall(stall_IF)
 );
 
 // Instruction memory 
@@ -102,6 +97,8 @@ logic [31:0] readData1, readData2; // Data read from registers
 // Control signals from the control unit
 logic regWrite_ID, memWrite_ID, memRead_ID, aluSrc, branchEnable_ID, jumpEnable_ID;
 aluOperations aluOp_ID;
+aluSrcASelect aluSrcA_ID;
+writeBackSelect wbSelect_ID;
 
 logic [31:0] sign_extended_immediate; // Immediate value after generation
 // Immediate Generator for RISC-V formats
@@ -131,10 +128,18 @@ ControlUnit controlUnit (
     .memWrite(memWrite_ID),
     .memRead(memRead_ID),
     .aluSrc(aluSrc),
+    .aluSrcA(aluSrcA_ID),
     .branEnable(branchEnable_ID),
     .jumpEnable(jumpEnable_ID),
+    .wbSelect(wbSelect_ID), 
     .aluOp(aluOp_ID)
 );
+
+// Values returned by the WB stage to the register file.
+logic regWrite_WB;
+logic [4:0] rd_WB;
+logic [31:0] writeBackData;
+
 // Register file 
 // USES RESGISTERS FROM WRITE BACK STAGE
 RegisterFile registerFile (
@@ -154,18 +159,20 @@ logic [31:0] IDEX_pc4;
 logic [31:0] IDEX_rs1;
 logic [31:0] IDEX_rs2;
 logic [31:0] IDEX_imm;
-logic [4:0]  IDEX_rd;
-logic [4:0]  IDEX_rs1_addr;
-logic [4:0]  IDEX_rs2_addr;
-logic [6:0]  IDEX_opcode;
-logic [2:0]  IDEX_funct3;
+logic [4:0] IDEX_rd;
+logic [4:0] IDEX_rs1_addr;
+logic [4:0] IDEX_rs2_addr;
+logic [6:0] IDEX_opcode;
+logic [2:0] IDEX_funct3;
 logic IDEX_regWrite;
 logic IDEX_memWrite;
 logic IDEX_memRead;
 logic IDEX_aluSrc;
+aluSrcASelect IDEX_aluSrcA;
 logic IDEX_isBranch;
 logic IDEX_isJump;
 aluOperations IDEX_aluOp;
+writeBackSelect IDEX_wbSelect;
 
 always_ff @(posedge clk or negedge reset_n) begin 
     if (!reset_n) begin
@@ -183,9 +190,11 @@ always_ff @(posedge clk or negedge reset_n) begin
         IDEX_memWrite <= 1'b0;
         IDEX_memRead <= 1'b0;
         IDEX_aluSrc <= 1'b0;
+        IDEX_aluSrcA <= ALU_A_RS1;
         IDEX_isBranch <= 1'b0;
         IDEX_isJump <= 1'b0;
         IDEX_aluOp <= ADD; // Default to ADD
+        IDEX_wbSelect <= WB_ALU;
     end else if (flush_IFID || bubble_IDEX) begin
         // Flush discards a wrong-path instruction. A bubble delays a valid
         // instruction in IF/ID. Both make the current ID/EX entry harmless.
@@ -203,9 +212,11 @@ always_ff @(posedge clk or negedge reset_n) begin
         IDEX_memWrite <= 1'b0;
         IDEX_memRead <= 1'b0;
         IDEX_aluSrc <= 1'b0;
+        IDEX_aluSrcA <= ALU_A_RS1;
         IDEX_isBranch <= 1'b0;
         IDEX_isJump <= 1'b0;
         IDEX_aluOp <= ADD;
+        IDEX_wbSelect <= WB_ALU;
     end else begin
         IDEX_pc <= IFID_pcAddress;
         IDEX_pc4 <= IFID_pcAddress_4;
@@ -222,23 +233,159 @@ always_ff @(posedge clk or negedge reset_n) begin
         IDEX_memWrite <= memWrite_ID; // Control signal for memory write
         IDEX_memRead <= memRead_ID; // Control signal for memory read
         IDEX_aluSrc <= aluSrc; // Control signal for ALU source (register vs immediate)
+        IDEX_aluSrcA <= aluSrcA_ID; // Select rs1, PC, or zero for ALU input A
         IDEX_isBranch <= branchEnable_ID; // Control signal for branch decision
         IDEX_isJump <= jumpEnable_ID; // Control signal for jump decision
         IDEX_aluOp <= aluOp_ID; // Control signal for ALU operation
+        IDEX_wbSelect <= wbSelect_ID;
     end
 
 end
 // ----------------------------------------
 // EX stage: ALU operations, branch decisions
 // ----------------------------------------
-// ALU inputs
+// ALU module declaration
 logic [31:0] aluInput1_EX;
 logic [31:0] aluInput2_EX;
+logic [31:0] aluResult_EX;
+
+// ALU registers from ID/EX pipeline register
+always_comb begin
+    case (IDEX_aluSrcA)
+        ALU_A_RS1:  aluInput1_EX = IDEX_rs1;
+        ALU_A_PC:   aluInput1_EX = IDEX_pc;
+        ALU_A_ZERO: aluInput1_EX = 32'b0;
+        default:    aluInput1_EX = IDEX_rs1;
+    endcase
+end
+
+assign aluInput2_EX = IDEX_aluSrc ? IDEX_imm : IDEX_rs2; // Second ALU operand is either immediate or rs2 value
+
 ALU alu (
-    .input1(aluInput1_EX),
-    .input2(aluInput2_EX),
-    .aluOp(IDEX_aluOp),
-    .result(aluResult_EX)
+    .operation(IDEX_aluOp),
+    .data1(aluInput1_EX),
+    .data2(aluInput2_EX),
+    .outputData(aluResult_EX)
 );
 
+// Branch decision logic
+always_comb begin
+    branch_taken_EX = 1'b0;
+    branch_target_EX = IDEX_pc + IDEX_imm;
+
+    if (IDEX_opcode == BRANCH && IDEX_isBranch) begin
+        case (IDEX_funct3)
+            BEQ: branch_taken_EX = (IDEX_rs1 == IDEX_rs2); // BEQ
+            BNE: branch_taken_EX = (IDEX_rs1 != IDEX_rs2); // BNE
+            BLT: branch_taken_EX = ($signed(IDEX_rs1) < $signed(IDEX_rs2)); // signed
+            BGE: branch_taken_EX = ($signed(IDEX_rs1) >= $signed(IDEX_rs2)); // signed
+            BLTU: branch_taken_EX = ($unsigned(IDEX_rs1) < $unsigned(IDEX_rs2)); // BLTU
+            BGEU: branch_taken_EX = ($unsigned(IDEX_rs1) >= $unsigned(IDEX_rs2)); // BGEU
+            default: branch_taken_EX = 1'b0;
+        endcase
+    end
+end
+
+// Jump decision logic
+always_comb begin
+    jump_taken_EX  = 1'b0;
+    jump_target_EX = 32'b0;
+    if (IDEX_isJump && (IDEX_opcode == JAL || IDEX_opcode == JALR)) begin
+        jump_taken_EX = 1'b1;
+
+        if (IDEX_opcode == JAL)
+            jump_target_EX = IDEX_pc + IDEX_imm;
+        else if (IDEX_opcode == JALR)
+            jump_target_EX = (IDEX_rs1 + IDEX_imm) & 32'hFFFF_FFFE;
+    end
+end
+
+assign redirect_EX = jump_taken_EX | branch_taken_EX;
+// A jump gets priority if these signals are ever asserted together.
+assign redirect_target_EX = jump_taken_EX ? jump_target_EX : branch_target_EX;
+
+// EX/MEM pipeline register
+logic [31:0] EXMEM_aluResult;
+logic [31:0] EXMEM_storeData;
+logic [31:0] EXMEM_pc4;
+logic [4:0] EXMEM_rd;
+logic EXMEM_regWrite;
+logic EXMEM_memWrite;
+logic EXMEM_memRead;
+writeBackSelect EXMEM_wbSelect;
+
+always_ff @(posedge clk or negedge reset_n) begin
+    if (!reset_n) begin
+        EXMEM_aluResult <= 32'b0;
+        EXMEM_storeData <= 32'b0;
+        EXMEM_pc4 <= 32'b0;
+        EXMEM_rd <= 5'b0;
+        EXMEM_regWrite <= 1'b0;
+        EXMEM_memWrite <= 1'b0;
+        EXMEM_memRead <= 1'b0;
+        EXMEM_wbSelect <= WB_ALU; // Default to writing back the ALU result
+    end else begin
+        EXMEM_aluResult <= aluResult_EX;
+        EXMEM_storeData <= IDEX_rs2;
+        EXMEM_pc4 <= IDEX_pc4;
+        EXMEM_rd <= IDEX_rd;
+        EXMEM_regWrite <= IDEX_regWrite;
+        EXMEM_memWrite <= IDEX_memWrite;
+        EXMEM_memRead <= IDEX_memRead;
+        EXMEM_wbSelect <= IDEX_wbSelect;
+    end
+end
+
+// ----------------------------------------
+// MEM stage: Memory access for load/store instructions, passes ALU result to the WB stage
+// ----------------------------------------
+logic [31:0] memReadData_MEM; // Data read from memory
+// Data memory module declaration
+DataMem dataMem (
+    .clk(clk),
+    .memWrite(EXMEM_memWrite),
+    .address(EXMEM_aluResult),
+    .wdata(EXMEM_storeData),
+    .rdata(memReadData_MEM)
+);
+
+// MEM/WB pipeline register
+logic [31:0] MEMWB_aluResult;
+logic [31:0] MEMWB_memReadData;
+logic [31:0] MEMWB_pc4;
+logic [4:0] MEMWB_rd;
+logic MEMWB_regWrite;
+writeBackSelect MEMWB_wbSelect;
+
+always_ff @(posedge clk or negedge reset_n) begin
+    if (!reset_n) begin
+        MEMWB_aluResult <= 32'b0;
+        MEMWB_memReadData <= 32'b0;
+        MEMWB_pc4 <= 32'b0;
+        MEMWB_rd <= 5'b0;
+        MEMWB_regWrite <= 1'b0;
+        MEMWB_wbSelect <= WB_ALU;
+    end else begin
+        MEMWB_aluResult <= EXMEM_aluResult;
+        MEMWB_memReadData <= EXMEM_memRead ? memReadData_MEM : 32'b0;
+        MEMWB_pc4 <= EXMEM_pc4;
+        MEMWB_rd <= EXMEM_rd;
+        MEMWB_regWrite <= EXMEM_regWrite;
+        MEMWB_wbSelect <= EXMEM_wbSelect;
+    end
+end
+
+// ----------------------------------------
+// WB stage: Write back data to the register file
+// ----------------------------------------
+assign regWrite_WB = MEMWB_regWrite;
+assign rd_WB = MEMWB_rd;
+
+always_comb begin
+    case (MEMWB_wbSelect)
+        WB_MEM:  writeBackData = MEMWB_memReadData;
+        WB_PC4:  writeBackData = MEMWB_pc4;
+        default: writeBackData = MEMWB_aluResult;
+    endcase
+end
 endmodule

@@ -14,6 +14,18 @@ typedef enum logic [3:0] {
     SLTU = 4'h9
 } aluOperations;
 
+typedef enum logic [1:0] {
+    ALU_A_RS1  = 2'b00,
+    ALU_A_PC   = 2'b01,
+    ALU_A_ZERO = 2'b10
+} aluSrcASelect;
+
+typedef enum logic [1:0] {
+    WB_ALU = 2'b00,
+    WB_MEM = 2'b01,
+    WB_PC4 = 2'b10
+} writeBackSelect;
+
 typedef enum logic [6:0] {
     R = 7'b0110011, // Register
     I = 7'b0010011, // Immediate
@@ -36,4 +48,3 @@ typedef enum logic [2:0] {
     BGEU = 3'b111 // >= unsigned
 } branchTypes;
 `endif
-

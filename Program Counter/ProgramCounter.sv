@@ -3,27 +3,22 @@
 module ProgramCounter (
     input logic clk,
     input logic reset_n,
-    input logic stall,                   // New stall input to hold PC and IF/ID
-
-    input logic jump_enable,
-    input logic branEnable,
-    input logic [31:0] branAddress, //address should be smaller
-    input logic [31:0] jump_target_address, //address should be smaller
+    input logic stall,
+    input logic redirect,
+    input logic [31:0] redirect_target,
     output logic [31:0] outputPCAddress
 );
 
 logic [31:0] currentPCAddress;
 logic [31:0] nextPC;
 
-// Jump > Branch > Sequential priority
-// If BranchEnable, go to the branch address, if not skip 4 to go to the next instruction
+// Redirect > Stall > Sequential priority.
+// An older branch/jump in EX must override a stall on a younger instruction.
 always_comb begin
-    if (stall) begin
-        nextPC = currentPCAddress; // Stall takes highest priority
-    end else if (jump_enable) begin
-       nextPC = jump_target_address;
-    end else if (branEnable) begin
-        nextPC = branAddress;
+    if (redirect) begin
+        nextPC = redirect_target;
+    end else if (stall) begin
+        nextPC = currentPCAddress;
     end else begin
         nextPC = currentPCAddress + 4;
     end

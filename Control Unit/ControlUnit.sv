@@ -10,12 +10,15 @@ module ControlUnit (
     output logic regWrite,
     output logic memWrite,
     output logic memRead,
-    // Register or immediate to ALU
+    // ALU operand selection
     output logic aluSrc,
+    output aluSrcASelect aluSrcA,
     // Branch Enable for Program Counter
     output logic branEnable,
     // Jump Enable for Program Counter
     output logic jumpEnable,
+    // Select the value eventually written into rd
+    output writeBackSelect wbSelect,
     // 4 bit ALU operations
     output aluOperations aluOp
 );
@@ -27,8 +30,10 @@ always_comb begin
     memWrite = 1'b0;
     memRead = 1'b0;
     aluSrc = 1'b0;
+    aluSrcA = ALU_A_RS1;
     branEnable = 1'b0;
     jumpEnable = 1'b0;
+    wbSelect = WB_ALU;
     aluOp = ADD; // Default now is to ADD, 4'b0000
 
     case (opcode)
@@ -75,6 +80,7 @@ always_comb begin
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
             memRead = 1'b1; // enable memory read
+            wbSelect = WB_MEM; // write loaded memory data into rd
             aluSrc = 1'b1; // second ALU operand from immediate
             branEnable = 1'b0; // disable branch
             aluOp = ADD; // address calculation
@@ -90,6 +96,7 @@ always_comb begin
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
             aluSrc = 1'b1; // second ALU operand from immediate
+            aluSrcA = ALU_A_ZERO; // 0 + upper immediate
             branEnable = 1'b0; // disable branch
             aluOp = ADD; // for loading upper immediate
         end
@@ -97,6 +104,7 @@ always_comb begin
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
             aluSrc = 1'b1; // second ALU operand from immediate
+            aluSrcA = ALU_A_PC; // PC + upper immediate
             branEnable = 1'b0; // disable branch
             aluOp = ADD; // for PC + immediate
         end
@@ -104,17 +112,22 @@ always_comb begin
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
             aluSrc = 1'b1; // second ALU operand from immediate
-            branEnable = 1'b1; // enable branch
+            branEnable = 1'b0; // JAL is an unconditional jump, not a branch
             jumpEnable = 1'b1; // enable jump
+            wbSelect = WB_PC4; // save return address in rd
             aluOp = ADD; // for PC + immediate
         end
         JALR: begin 
             regWrite = 1'b1; //enable register write
             memWrite = 1'b0; //disable memory write
             aluSrc = 1'b1; // second ALU operand from immediate
-            branEnable = 1'b1; // enable branch
+            branEnable = 1'b0; // JALR is an unconditional jump, not a branch
             jumpEnable = 1'b1; // enable jump
+            wbSelect = WB_PC4; // save return address in rd
             aluOp = ADD; // for PC + immediate
+        end
+        default: begin
+            // Keep the safe defaults assigned above for unsupported opcodes.
         end
     endcase
 end
