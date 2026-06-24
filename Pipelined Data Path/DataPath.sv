@@ -141,10 +141,10 @@ RegisterFile registerFile (
     .regWrite(regWrite_WB), // Write back happens in the WB stage, so we use regWrite_WB
     .raddress1(rs1_ID),
     .raddress2(rs2_ID),
-    .waddress(rd_WB), // Write back happens in the WB stage, so we use rd_WB
-    .wdata(writeBackData), // This is the data that we will write back to the register file in the WB stage
     .rdata1(readData1),
-    .rdata2(readData2)
+    .rdata2(readData2),
+    .waddress(rd_WB), // Write back happens in the WB stage, so we use rd_WB
+    .wdata(writeBackData) // This is the data that we will write back to the register file in the WB stage
 );
 
 // ID/EX pipeline register - holds all the decoded information for the EX stage
@@ -167,6 +167,18 @@ logic IDEX_isBranch;
 logic IDEX_isJump;
 aluOperations IDEX_aluOp;
 writeBackSelect IDEX_wbSelect;
+
+// Load-use hazard detection:
+// If the instruction currently in EX is a load, its data will not be ready
+// soon enough for the instruction currently in ID. Freeze IF/ID and insert
+// one harmless bubble into ID/EX.
+Hazard_Detection_Unit hazardDetectionUnit (
+    .rs1_ID(rs1_ID),
+    .rs2_ID(rs2_ID),
+    .rd_EX(IDEX_rd),
+    .MemRead_EX(IDEX_memRead),
+    .stall(stall_IF)
+);
 
 always_ff @(posedge clk or negedge reset_n) begin 
     if (!reset_n) begin
@@ -242,18 +254,40 @@ end
 logic [31:0] aluInput1_EX;
 logic [31:0] aluInput2_EX;
 logic [31:0] aluResult_EX;
+logic [31:0] forwarded_rs1_EX;
+logic [31:0] forwarded_rs2_EX;
+
+Forwarding_Unit forwardingUnit (
+    .IDEX_rs1(IDEX_rs1),
+    .IDEX_rs2(IDEX_rs2),
+    .IDEX_rs1_addr(IDEX_rs1_addr),
+    .IDEX_rs2_addr(IDEX_rs2_addr),
+
+    .EXMEM_regWrite(EXMEM_regWrite),
+    .EXMEM_rd(EXMEM_rd),
+    .EXMEM_aluResult(EXMEM_aluResult),
+    .EXMEM_pc4(EXMEM_pc4),
+    .EXMEM_wbSelect(EXMEM_wbSelect),
+
+    .MEMWB_regWrite(MEMWB_regWrite),
+    .MEMWB_rd(MEMWB_rd),
+    .writeBackData(writeBackData),
+
+    .forwarded_rs1_EX(forwarded_rs1_EX),
+    .forwarded_rs2_EX(forwarded_rs2_EX)
+);
 
 // ALU registers from ID/EX pipeline register
 always_comb begin
     case (IDEX_aluSrcA)
-        ALU_A_RS1:  aluInput1_EX = IDEX_rs1;
-        ALU_A_PC:   aluInput1_EX = IDEX_pc;
+        ALU_A_RS1:  aluInput1_EX = forwarded_rs1_EX; 
+        ALU_A_PC:   aluInput1_EX = IDEX_pc; // Use PC for AUIPC and JALR
         ALU_A_ZERO: aluInput1_EX = 32'b0;
-        default:    aluInput1_EX = IDEX_rs1;
+        default:    aluInput1_EX = forwarded_rs1_EX;
     endcase
 end
 
-assign aluInput2_EX = IDEX_aluSrc ? IDEX_imm : IDEX_rs2; // Second ALU operand is either immediate or rs2 value
+assign aluInput2_EX = IDEX_aluSrc ? IDEX_imm : forwarded_rs2_EX; // Second ALU operand is either immediate or forwarded rs2 value
 
 ALU alu (
     .operation(IDEX_aluOp),
@@ -275,12 +309,12 @@ always_comb begin
 
     if (IDEX_opcode == BRANCH && IDEX_isBranch) begin
         case (IDEX_funct3)
-            BEQ: branch_taken_EX = (IDEX_rs1 == IDEX_rs2); // BEQ
-            BNE: branch_taken_EX = (IDEX_rs1 != IDEX_rs2); // BNE
-            BLT: branch_taken_EX = ($signed(IDEX_rs1) < $signed(IDEX_rs2)); // signed
-            BGE: branch_taken_EX = ($signed(IDEX_rs1) >= $signed(IDEX_rs2)); // signed
-            BLTU: branch_taken_EX = ($unsigned(IDEX_rs1) < $unsigned(IDEX_rs2)); // BLTU
-            BGEU: branch_taken_EX = ($unsigned(IDEX_rs1) >= $unsigned(IDEX_rs2)); // BGEU
+            BEQ: branch_taken_EX = (forwarded_rs1_EX == forwarded_rs2_EX); // BEQ
+            BNE: branch_taken_EX = (forwarded_rs1_EX != forwarded_rs2_EX); // BNE
+            BLT: branch_taken_EX = ($signed(forwarded_rs1_EX) < $signed(forwarded_rs2_EX)); // signed
+            BGE: branch_taken_EX = ($signed(forwarded_rs1_EX) >= $signed(forwarded_rs2_EX)); // signed
+            BLTU: branch_taken_EX = ($unsigned(forwarded_rs1_EX) < $unsigned(forwarded_rs2_EX)); // BLTU
+            BGEU: branch_taken_EX = ($unsigned(forwarded_rs1_EX) >= $unsigned(forwarded_rs2_EX)); // BGEU
             default: branch_taken_EX = 1'b0;
         endcase
     end
@@ -296,7 +330,7 @@ always_comb begin
         if (IDEX_opcode == JAL)
             jump_target_EX = IDEX_pc + IDEX_imm;
         else if (IDEX_opcode == JALR)
-            jump_target_EX = (IDEX_rs1 + IDEX_imm) & 32'hFFFF_FFFE;
+            jump_target_EX = (forwarded_rs1_EX + IDEX_imm) & 32'hFFFF_FFFE;
     end
 end
 
@@ -326,7 +360,7 @@ always_ff @(posedge clk or negedge reset_n) begin
         EXMEM_wbSelect <= WB_ALU; // Default to writing back the ALU result
     end else begin
         EXMEM_aluResult <= aluResult_EX;
-        EXMEM_storeData <= IDEX_rs2;
+        EXMEM_storeData <= forwarded_rs2_EX;
         EXMEM_pc4 <= IDEX_pc4;
         EXMEM_rd <= IDEX_rd;
         EXMEM_regWrite <= IDEX_regWrite;

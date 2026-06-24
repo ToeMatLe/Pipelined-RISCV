@@ -18,8 +18,23 @@ module RegisterFile (
 logic [31:0] registers [31:0];
 
 // Read Data is Combinational, when read addresses change, assign read datas the value of the register accordingly to the addresses
-assign rdata1 = (raddress1 != 5'b0) ? registers[raddress1] : 32'b0;
-assign rdata2 = (raddress2 != 5'b0) ? registers[raddress2] : 32'b0;
+always_comb begin
+    if (raddress1 == 5'd0) begin
+        rdata1 = 32'b0;
+    end else if (regWrite && (raddress1 == waddress)) begin
+        rdata1 = wdata;
+    end else begin
+        rdata1 = registers[raddress1];
+    end
+
+    if (raddress2 == 5'd0) begin
+        rdata2 = 32'b0;
+    end else if (regWrite && (raddress2 == waddress)) begin
+        rdata2 = wdata;
+    end else begin
+        rdata2 = registers[raddress2];
+    end
+end
 
 // Write Data is Sequential 
 always_ff @(posedge clk) begin
