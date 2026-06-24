@@ -28,12 +28,6 @@ assign bubble_IDEX = stall_IF;
 logic redirect_EX;                  // Control signal to indicate EX stage has a jump/branch 
 logic [31:0] redirect_target_EX;    // Target address from EX stage for jump/branch
 
-// EX stage signals for jump/branch decisions
-logic jump_taken_EX;
-logic [31:0] jump_target_EX;
-logic branch_taken_EX;
-logic [31:0] branch_target_EX;
-
 assign flush_IFID = redirect_EX; // On redirect, we need to flush IF/ID to prevent wrong instruction from being decoded
 
 // Program Counter
@@ -267,6 +261,12 @@ ALU alu (
     .data2(aluInput2_EX),
     .outputData(aluResult_EX)
 );
+
+// EX stage signals for jump/branch decisions
+logic jump_taken_EX;
+logic [31:0] jump_target_EX;
+logic branch_taken_EX;
+logic [31:0] branch_target_EX;
 
 // Branch decision logic
 always_comb begin
