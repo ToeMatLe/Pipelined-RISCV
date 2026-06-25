@@ -3,6 +3,7 @@
 A lightweight 5-stage RV32I-style soft-core processor written in SystemVerilog.
 
 This project implements a pipelined RISC-V datapath with hazard detection, register forwarding, branch/jump flushing, and a register file that supports same-cycle write/read bypassing. The goal of this project is to build up a working pipelined CPU piece by piece while keeping the design readable and easy to debug.
+
 ## Features
 
 - RV32I-style ALU operations

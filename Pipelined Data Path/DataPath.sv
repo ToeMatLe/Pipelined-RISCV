@@ -19,23 +19,29 @@ assign pcAddress_4_IF = pcAddress_IF + 32'd4;
 logic stall_IF;     // hold PC and IF/ID
 logic bubble_IDEX;  // insert a harmless operation into ID/EX
 logic flush_IFID;   // inject NOP into IF/ID (on redirect)
+logic loadUseStall;
+logic cacheStall_MEM;
+logic redirectAllowed_EX;
 
 // A load-use hazard causes two different actions from the same condition:
 // stall the PC and IF/ID register, but clear ID/EX so older instructions continue.
-assign bubble_IDEX = stall_IF;
+// A cache miss is different: hold the whole pipeline state until the cache is ready.
+assign stall_IF = loadUseStall || cacheStall_MEM;
+assign bubble_IDEX = loadUseStall;
 
 // Redirect from EX
 logic redirect_EX;                  // Control signal to indicate EX stage has a jump/branch 
 logic [31:0] redirect_target_EX;    // Target address from EX stage for jump/branch
 
-assign flush_IFID = redirect_EX; // On redirect, we need to flush IF/ID to prevent wrong instruction from being decoded
+assign redirectAllowed_EX = redirect_EX && !cacheStall_MEM;
+assign flush_IFID = redirectAllowed_EX; // On redirect, we need to flush IF/ID to prevent wrong instruction from being decoded
 
 // Program Counter
 // A taken branch or jump redirects the PC to the target calculated in EX.
 ProgramCounter programCounter (
     .clk(clk),
     .reset_n(reset_n),
-    .redirect(redirect_EX),
+    .redirect(redirectAllowed_EX),
     .redirect_target(redirect_target_EX),
     .outputPCAddress(pcAddress_IF),
     .stall(stall_IF)
@@ -177,7 +183,7 @@ Hazard_Detection_Unit hazardDetectionUnit (
     .rs2_ID(rs2_ID),
     .rd_EX(IDEX_rd),
     .MemRead_EX(IDEX_memRead),
-    .stall(stall_IF)
+    .stall(loadUseStall)
 );
 
 always_ff @(posedge clk or negedge reset_n) begin 
@@ -201,6 +207,8 @@ always_ff @(posedge clk or negedge reset_n) begin
         IDEX_isJump <= 1'b0;
         IDEX_aluOp <= ADD; // Default to ADD
         IDEX_wbSelect <= WB_ALU;
+    end else if (cacheStall_MEM) begin
+        // Hold ID/EX while an older memory instruction is waiting on cache.
     end else if (flush_IFID || bubble_IDEX) begin
         // Flush discards a wrong-path instruction. A bubble delays a valid
         // instruction in IF/ID. Both make the current ID/EX entry harmless.
@@ -358,7 +366,7 @@ always_ff @(posedge clk or negedge reset_n) begin
         EXMEM_memWrite <= 1'b0;
         EXMEM_memRead <= 1'b0;
         EXMEM_wbSelect <= WB_ALU; // Default to writing back the ALU result
-    end else begin
+    end else if (!cacheStall_MEM) begin
         EXMEM_aluResult <= aluResult_EX;
         EXMEM_storeData <= forwarded_rs2_EX;
         EXMEM_pc4 <= IDEX_pc4;
@@ -374,13 +382,52 @@ end
 // MEM stage: Memory access for load/store instructions, passes ALU result to the WB stage
 // ----------------------------------------
 logic [31:0] memReadData_MEM; // Data read from memory
-// Data memory module declaration
-DataMem dataMem (
+logic cacheBusRd_MEM;
+logic cacheBusRdx_MEM;
+logic cacheBusUpgrade_MEM;
+logic cacheBusWb_MEM;
+
+logic unusedCacheOutputs_MEM;
+logic cacheBackingMemWrite_MEM;
+
+logic [31:0] cacheBackingAddress_MEM;
+logic [31:0] cacheBackingWdata_MEM;
+logic [31:0] cacheBackingRdata_MEM;
+
+// Unused cache outputs afor multicore support. The current CPU is single-core, so these signals are not used
+assign unusedCacheOutputs_MEM = &{cacheBusRd_MEM, cacheBusRdx_MEM, cacheBusUpgrade_MEM, cacheBusWb_MEM};
+
+// L1 data cache.
+// The current CPU is single-core, so external snoop inputs are tied low.
+L1DataCache l1DataCache (
     .clk(clk),
+    .reset_n(reset_n),
+    .memRead(EXMEM_memRead),
     .memWrite(EXMEM_memWrite),
     .address(EXMEM_aluResult),
     .wdata(EXMEM_storeData),
-    .rdata(memReadData_MEM)
+    .rdata(memReadData_MEM),
+    .cache_stall(cacheStall_MEM),
+    .bus_read(1'b0),
+    .bus_write(1'b0),
+    .issue_bus_rd(cacheBusRd_MEM),
+    .issue_bus_rdx(cacheBusRdx_MEM),
+    .issue_bus_upgrade(cacheBusUpgrade_MEM),
+    .issue_bus_wb(cacheBusWb_MEM),
+    // Backing memory interface
+    .backing_memWrite(cacheBackingMemWrite_MEM),
+    .backing_address(cacheBackingAddress_MEM),
+    .backing_wdata(cacheBackingWdata_MEM),
+    .backing_rdata(cacheBackingRdata_MEM)
+);
+
+// Backing data memory behind the L1 cache.
+DataMem dataMem (
+    .clk(clk),
+    .memWrite(cacheBackingMemWrite_MEM),
+    .address(cacheBackingAddress_MEM),
+    .wdata(cacheBackingWdata_MEM),
+    .rdata(cacheBackingRdata_MEM) // Data read from backing memory is returned to the cache
 );
 
 // MEM/WB pipeline register
@@ -399,7 +446,7 @@ always_ff @(posedge clk or negedge reset_n) begin
         MEMWB_rd <= 5'b0;
         MEMWB_regWrite <= 1'b0;
         MEMWB_wbSelect <= WB_ALU;
-    end else begin
+    end else if (!cacheStall_MEM) begin
         MEMWB_aluResult <= EXMEM_aluResult;
         MEMWB_memReadData <= EXMEM_memRead ? memReadData_MEM : 32'b0;
         MEMWB_pc4 <= EXMEM_pc4;

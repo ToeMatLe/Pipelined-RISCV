@@ -47,4 +47,12 @@ typedef enum logic [2:0] {
     BLTU = 3'b110, // < unsigned
     BGEU = 3'b111 // >= unsigned
 } branchTypes;
+
+// MSI cache coherence states for future cache/coherence support.
+// Prefixes avoid colliding with other enum names in the CPU.
+typedef enum logic [1:0] {
+    MSI_MODIFIED = 2'b00,
+    MSI_SHARED   = 2'b01,
+    MSI_INVALID  = 2'b10
+} msiState;
 `endif
