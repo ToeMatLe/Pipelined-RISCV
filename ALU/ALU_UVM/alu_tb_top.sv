@@ -21,7 +21,11 @@ module alu_tb_top;
         .data2      (alu_vif.data2),
         .outputData (alu_vif.outputData)
     );
-
+    initial begin
+        $fsdbDumpfile("alu_uvm.fsdb");
+        $fsdbDumpvars(0, alu_tb_top);
+    end
+ 
     initial begin
         alu_vif.valid     = 1'b0;
         alu_vif.operation = 4'h0;
