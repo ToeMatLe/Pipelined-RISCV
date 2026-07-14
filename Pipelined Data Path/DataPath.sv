@@ -265,6 +265,24 @@ logic [31:0] aluResult_EX;
 logic [31:0] forwarded_rs1_EX;
 logic [31:0] forwarded_rs2_EX;
 
+// Later pipeline-stage registers are declared before the forwarding unit so
+// simulators do not infer implicit wires from the port connections below.
+logic [31:0] EXMEM_aluResult;
+logic [31:0] EXMEM_storeData;
+logic [31:0] EXMEM_pc4;
+logic [4:0] EXMEM_rd;
+logic EXMEM_regWrite;
+logic EXMEM_memWrite;
+logic EXMEM_memRead;
+writeBackSelect EXMEM_wbSelect;
+
+logic [31:0] MEMWB_aluResult;
+logic [31:0] MEMWB_memReadData;
+logic [31:0] MEMWB_pc4;
+logic [4:0] MEMWB_rd;
+logic MEMWB_regWrite;
+writeBackSelect MEMWB_wbSelect;
+
 Forwarding_Unit forwardingUnit (
     .IDEX_rs1(IDEX_rs1),
     .IDEX_rs2(IDEX_rs2),
@@ -347,15 +365,6 @@ assign redirect_EX = jump_taken_EX | branch_taken_EX;
 assign redirect_target_EX = jump_taken_EX ? jump_target_EX : branch_target_EX;
 
 // EX/MEM pipeline register
-logic [31:0] EXMEM_aluResult;
-logic [31:0] EXMEM_storeData;
-logic [31:0] EXMEM_pc4;
-logic [4:0] EXMEM_rd;
-logic EXMEM_regWrite;
-logic EXMEM_memWrite;
-logic EXMEM_memRead;
-writeBackSelect EXMEM_wbSelect;
-
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
         EXMEM_aluResult <= 32'b0;
@@ -431,13 +440,6 @@ DataMem dataMem (
 );
 
 // MEM/WB pipeline register
-logic [31:0] MEMWB_aluResult;
-logic [31:0] MEMWB_memReadData;
-logic [31:0] MEMWB_pc4;
-logic [4:0] MEMWB_rd;
-logic MEMWB_regWrite;
-writeBackSelect MEMWB_wbSelect;
-
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
         MEMWB_aluResult <= 32'b0;
