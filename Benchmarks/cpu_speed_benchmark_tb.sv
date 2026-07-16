@@ -4,7 +4,9 @@
 // pipelined RTL. Both processors expose DataPath(clk, reset_n) and use the same
 // instruction-memory/register-file instance names, so the benchmark itself does
 // not change between runs.
-module cpu_speed_benchmark_tb;
+module cpu_speed_benchmark_tb #(
+  parameter bit USE_L1_CACHE = 1'b0
+);
 
   localparam time CLK_PERIOD = 10ns;
   localparam int  LOOP_COUNT = 50;
@@ -18,7 +20,9 @@ module cpu_speed_benchmark_tb;
 
   always #(CLK_PERIOD / 2) clk = ~clk;
 
-  DataPath dut (
+  DataPath #(
+    .USE_L1_CACHE(USE_L1_CACHE)
+  ) dut (
     .clk     (clk),
     .reset_n (reset_n)
   );

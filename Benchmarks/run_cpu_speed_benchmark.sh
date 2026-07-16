@@ -3,6 +3,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Run the direct-DataMem baseline by default. Use USE_L1_CACHE=1 to run the
+# exact same benchmark through the existing L1 cache.
+USE_L1_CACHE="${USE_L1_CACHE:-0}"
+
 # UCLA school server VCS/Verdi setup.
 export SYNOPSYS="${SYNOPSYS:-/usr/apps/synopsys}"
 export VCS_HOME="${VCS_HOME:-/home/apps3/Synopsys/VCS/vT-2022.06-1}"
@@ -33,6 +37,7 @@ SV_SOURCES=(
 
 vcs \
     -full64 -sverilog -timescale=1ns/1ps \
+    -pvalue+cpu_speed_benchmark_tb.USE_L1_CACHE="$USE_L1_CACHE" \
     -debug_access+all -kdb \
     +incdir+. \
     +incdir+ALU \

@@ -1,0 +1,47 @@
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Single Cycle vs Pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Single cycle
+------------
+ACTUAL RESOURCE DEDECATION
+LUTs: 952
+FF: 40
+
+Power On-chip: 0.197W
+Dynamic: 0.066W
+Static:  0.131W
+
+Timing: 10 ns/100 MHz
+WNS: -.083ns
+TNS: -.158ns
+8 failing endpoints
+Total # of endpoints: 5756
+
+Tmin ≈ 10.000 − (−0.083) = 10.083 ns
+Fmax ≈ 1000 / 10.083 = 99.18 MHz
+Approximate maximum frequency: 99.18 MHz
+
+Pipeline
+----------
+ACTUAL RESOURCE DEDECATION
+LUTs: 1720
+FF: 540
+
+Power On-chip: 0.22W
+Dynamic: 0.089W
+Static:  0.131W
+
+Timing: 10 ns/100 MHz
+WNS: .375ns
+TNS: 0 ns
+0 failing endpoints
+Total # of endpoints: 6379
+
+Tmin ≈ 10.000 − (0.375) = 9.625 ns
+Fmax ≈ 1000 / 9.625 = 103.9 MHz
+Approximate maximum frequency: 104 MHz
+
+NOTES:
+- implementation requires physical outputs or FPGA debug hardware such as an ILA.
+- Bigger fanout = bigger delay
+- Effective performance = Fmax / average CPI

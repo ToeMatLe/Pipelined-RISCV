@@ -1,7 +1,11 @@
 `timescale 1ns / 1ps
 `include "typedef.svh"
 
-module DataPath (
+module DataPath #(
+    // 0: connect the MEM stage directly to DataMem for the fastest CPU-core baseline.
+    // 1: place the existing L1DataCache between the MEM stage and DataMem.
+    parameter bit USE_L1_CACHE = 1'b0
+) (
     input logic clk,
     input logic reset_n
 );
@@ -390,7 +394,7 @@ end
 // ----------------------------------------
 // MEM stage: Memory access for load/store instructions, passes ALU result to the WB stage
 // ----------------------------------------
-logic [31:0] memReadData_MEM; // Data read from memory
+logic [31:0] memReadData_MEM; // Data read from the selected memory path
 logic cacheBusRd_MEM;
 logic cacheBusRdx_MEM;
 logic cacheBusUpgrade_MEM;
@@ -406,31 +410,52 @@ logic [31:0] cacheBackingRdata_MEM;
 // Unused cache outputs afor multicore support. The current CPU is single-core, so these signals are not used
 assign unusedCacheOutputs_MEM = &{cacheBusRd_MEM, cacheBusRdx_MEM, cacheBusUpgrade_MEM, cacheBusWb_MEM};
 
-// L1 data cache.
-// The current CPU is single-core, so external snoop inputs are tied low.
-L1DataCache l1DataCache (
-    .clk(clk),
-    .reset_n(reset_n),
-    .memRead(EXMEM_memRead),
-    .memWrite(EXMEM_memWrite),
-    .address(EXMEM_aluResult),
-    .wdata(EXMEM_storeData),
-    .rdata(memReadData_MEM),
-    .cache_stall(cacheStall_MEM),
-    .bus_read(1'b0),
-    .bus_write(1'b0),
-    .issue_bus_rd(cacheBusRd_MEM),
-    .issue_bus_rdx(cacheBusRdx_MEM),
-    .issue_bus_upgrade(cacheBusUpgrade_MEM),
-    .issue_bus_wb(cacheBusWb_MEM),
-    // Backing memory interface
-    .backing_memWrite(cacheBackingMemWrite_MEM),
-    .backing_address(cacheBackingAddress_MEM),
-    .backing_wdata(cacheBackingWdata_MEM),
-    .backing_rdata(cacheBackingRdata_MEM)
-);
+// Select the memory hierarchy at elaboration time. Because USE_L1_CACHE is a
+// parameter, bypass mode does not synthesize a runtime mux or any cache-control
+// path. The L1 implementation remains available by setting the parameter to 1.
+generate
+    if (USE_L1_CACHE) begin : gen_l1_cache
+        // The current CPU is single-core, so external snoop inputs are tied low.
+        L1DataCache l1DataCache (
+            .clk(clk),
+            .reset_n(reset_n),
+            .memRead(EXMEM_memRead),
+            .memWrite(EXMEM_memWrite),
+            .address(EXMEM_aluResult),
+            .wdata(EXMEM_storeData),
+            .rdata(memReadData_MEM),
+            .cache_stall(cacheStall_MEM),
+            .bus_read(1'b0),
+            .bus_write(1'b0),
+            .issue_bus_rd(cacheBusRd_MEM),
+            .issue_bus_rdx(cacheBusRdx_MEM),
+            .issue_bus_upgrade(cacheBusUpgrade_MEM),
+            .issue_bus_wb(cacheBusWb_MEM),
+            // Backing memory interface
+            .backing_memWrite(cacheBackingMemWrite_MEM),
+            .backing_address(cacheBackingAddress_MEM),
+            .backing_wdata(cacheBackingWdata_MEM),
+            .backing_rdata(cacheBackingRdata_MEM)
+        );
+    end else begin : gen_cache_bypass
+        // Direct, single-cycle access to the existing on-chip DataMem.
+        assign memReadData_MEM = cacheBackingRdata_MEM;
+        assign cacheStall_MEM = 1'b0;
 
-// Backing data memory behind the L1 cache.
+        assign cacheBackingMemWrite_MEM = EXMEM_memWrite;
+        assign cacheBackingAddress_MEM = EXMEM_aluResult;
+        assign cacheBackingWdata_MEM = EXMEM_storeData;
+
+        // Keep the cache-only status signals deterministic in bypass mode.
+        assign cacheBusRd_MEM = 1'b0;
+        assign cacheBusRdx_MEM = 1'b0;
+        assign cacheBusUpgrade_MEM = 1'b0;
+        assign cacheBusWb_MEM = 1'b0;
+    end
+endgenerate
+
+// DataMem is either behind the L1 or connected directly to the MEM stage.
+// Its instance name stays unchanged so existing testbenches can inspect it.
 DataMem dataMem (
     .clk(clk),
     .memWrite(cacheBackingMemWrite_MEM),
