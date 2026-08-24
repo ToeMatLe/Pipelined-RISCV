@@ -121,6 +121,20 @@ The stall does three things:
 
 After that one-cycle wait, the loaded value can be forwarded from MEM/WB to the instruction that needs it.
 
+### Measured CPI impact
+
+The hazard benchmark can run the same 207-instruction workload in two modes:
+
+- an interlocked baseline with forwarding disabled, which stalls until RAW
+  producers reach writeback;
+- the normal optimized pipeline, which forwards ALU results and stalls only for
+  a load-use dependency.
+
+Run `Benchmarks/run_hazard_cpi_comparison.sh` to reproduce the comparison. With
+the direct `DataMem` path in both configurations, the measured results are 413
+cycles (CPI 1.995) for the baseline and 310 cycles (CPI 1.498) with forwarding,
+a 24.94% reduction in effective CPI.
+
 ### Normal Register Hazards
 
 Most non-load register hazards do not need a stall.

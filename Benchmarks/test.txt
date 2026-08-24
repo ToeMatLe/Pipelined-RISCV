@@ -23,23 +23,42 @@ Approximate maximum frequency: 99.18 MHz
 
 Pipeline
 ----------
-ACTUAL RESOURCE DEDECATION
-LUTs: 1720
-FF: 540
+Test 1: (Run with 100Mhz baseline)
+    ACTUAL RESOURCE DEDECATION
+    LUTs: 1720
+    FF: 540
 
-Power On-chip: 0.22W
-Dynamic: 0.089W
-Static:  0.131W
+    Power On-chip: 0.22W
+    Dynamic: 0.089W
+    Static:  0.131W
 
-Timing: 10 ns/100 MHz
-WNS: .375ns
-TNS: 0 ns
-0 failing endpoints
-Total # of endpoints: 6379
+    Timing: 10 ns/100 MHz
+    WNS: .375ns
+    TNS: 0 ns
+    0 failing endpoints
+    Total # of endpoints: 6379
 
-Tmin ≈ 10.000 − (0.375) = 9.625 ns
-Fmax ≈ 1000 / 9.625 = 103.9 MHz
-Approximate maximum frequency: 104 MHz
+    Tmin ≈ 10.000 − (0.375) = 9.625 ns
+    Fmax ≈ 1000 / 9.625 = 103.9 MHz
+    Approximate maximum frequency: 104 MHz
+Test 2: (Run with 105Mhz baseline, with Performance_ExplorePostRoutePhysOpt)
+    ACTUAL RESOURCE DEDECATION
+    LUTs: 1720
+    FF: 540
+
+    Power On-chip: 0.225W
+    Dynamic: 0.094W
+    Static:  0.131W
+
+    Timing: 9.524 ns / 105 MHz
+    WNS: 0.110 ns
+    TNS: 0 ns
+    0 failing endpoints
+    Total # of endpoints: 6379      
+    
+    Tmin ≈ 9.524 − 0.110 = 9.414 ns
+    Fmax ≈ 1000 / 9.414 = 106.2 MHz
+    Approximate maximum frequency: 106 MHz
 
 NOTES:
 - implementation requires physical outputs or FPGA debug hardware such as an ILA.

@@ -4,7 +4,12 @@
 module DataPath #(
     // 0: connect the MEM stage directly to DataMem for the fastest CPU-core baseline.
     // 1: place the existing L1DataCache between the MEM stage and DataMem.
-    parameter bit USE_L1_CACHE = 1'b0
+    parameter bit USE_L1_CACHE = 1'b1,
+
+    // Benchmarking switch. The normal design forwards results into EX. When
+    // disabled, correctness is preserved by stalling on every outstanding RAW
+    // dependency until the value can be read from the register file.
+    parameter bit ENABLE_FORWARDING = 1'b1
 ) (
     input logic clk,
     input logic reset_n
@@ -24,6 +29,10 @@ logic stall_IF;     // hold PC and IF/ID
 logic bubble_IDEX;  // insert a harmless operation into ID/EX
 logic flush_IFID;   // inject NOP into IF/ID (on redirect)
 logic loadUseStall;
+logic forwardingLoadUseStall;
+logic noForwardingRawStall;
+logic rs1Used_ID;
+logic rs2Used_ID;
 logic cacheStall_MEM;
 logic redirectAllowed_EX;
 
@@ -32,6 +41,30 @@ logic redirectAllowed_EX;
 // A cache miss is different: hold the whole pipeline state until the cache is ready.
 assign stall_IF = loadUseStall || cacheStall_MEM;
 assign bubble_IDEX = loadUseStall;
+
+// Identify the architectural source operands of the instruction in ID. This
+// avoids treating immediate bits as an rs2 address in the no-forwarding
+// benchmark configuration.
+always_comb begin
+    rs1Used_ID = 1'b0;
+    rs2Used_ID = 1'b0;
+
+    case (opcode_ID)
+        R, BRANCH: begin
+            rs1Used_ID = 1'b1;
+            rs2Used_ID = 1'b1;
+        end
+        I, LOAD, JALR: begin
+            rs1Used_ID = 1'b1;
+        end
+        STORE: begin
+            rs1Used_ID = 1'b1;
+            rs2Used_ID = 1'b1;
+        end
+        default: begin
+        end
+    endcase
+end
 
 // Redirect from EX
 logic redirect_EX;                  // Control signal to indicate EX stage has a jump/branch 
@@ -187,8 +220,23 @@ Hazard_Detection_Unit hazardDetectionUnit (
     .rs2_ID(rs2_ID),
     .rd_EX(IDEX_rd),
     .MemRead_EX(IDEX_memRead),
-    .stall(loadUseStall)
+    .stall(forwardingLoadUseStall)
 );
+
+// A pipeline without forwarding must wait while a producer is in either EX or
+// MEM. Once it reaches WB, the register file's same-cycle bypass supplies the
+// new value to ID. The optimized pipeline needs only the one-cycle load-use
+// interlock because all other results can be forwarded.
+assign noForwardingRawStall =
+    (IDEX_regWrite && (IDEX_rd != 5'd0) &&
+        ((rs1Used_ID && (IDEX_rd == rs1_ID)) ||
+         (rs2Used_ID && (IDEX_rd == rs2_ID)))) ||
+    (EXMEM_regWrite && (EXMEM_rd != 5'd0) &&
+        ((rs1Used_ID && (EXMEM_rd == rs1_ID)) ||
+         (rs2Used_ID && (EXMEM_rd == rs2_ID))));
+
+assign loadUseStall = ENABLE_FORWARDING ? forwardingLoadUseStall
+                                        : noForwardingRawStall;
 
 always_ff @(posedge clk or negedge reset_n) begin 
     if (!reset_n) begin
@@ -268,6 +316,8 @@ logic [31:0] aluInput2_EX;
 logic [31:0] aluResult_EX;
 logic [31:0] forwarded_rs1_EX;
 logic [31:0] forwarded_rs2_EX;
+logic [31:0] forwardingResult_rs1_EX;
+logic [31:0] forwardingResult_rs2_EX;
 
 // Later pipeline-stage registers are declared before the forwarding unit so
 // simulators do not infer implicit wires from the port connections below.
@@ -303,9 +353,12 @@ Forwarding_Unit forwardingUnit (
     .MEMWB_rd(MEMWB_rd),
     .writeBackData(writeBackData),
 
-    .forwarded_rs1_EX(forwarded_rs1_EX),
-    .forwarded_rs2_EX(forwarded_rs2_EX)
+    .forwarded_rs1_EX(forwardingResult_rs1_EX),
+    .forwarded_rs2_EX(forwardingResult_rs2_EX)
 );
+
+assign forwarded_rs1_EX = ENABLE_FORWARDING ? forwardingResult_rs1_EX : IDEX_rs1;
+assign forwarded_rs2_EX = ENABLE_FORWARDING ? forwardingResult_rs2_EX : IDEX_rs2;
 
 // ALU registers from ID/EX pipeline register
 always_comb begin
@@ -415,16 +468,33 @@ assign unusedCacheOutputs_MEM = &{cacheBusRd_MEM, cacheBusRdx_MEM, cacheBusUpgra
 // path. The L1 implementation remains available by setting the parameter to 1.
 generate
     if (USE_L1_CACHE) begin : gen_l1_cache
+        logic cacheRequestValid_MEM;
+        logic cacheResponseValid_MEM;
+        logic [31:0] cacheResponseData_MEM;
+
+        // EX/MEM holds its request until the cache returns a registered response
+        assign cacheRequestValid_MEM = EXMEM_memRead || EXMEM_memWrite;
+        assign cacheStall_MEM = cacheRequestValid_MEM && !cacheResponseValid_MEM;
+        assign memReadData_MEM = cacheResponseData_MEM;
+
         // The current CPU is single-core, so external snoop inputs are tied low.
-        L1DataCache l1DataCache (
+        L1DataCache #(
+            .CACHE_LINES(16),
+            .ADDR_WIDTH(12),
+            .ENABLE_MSI(1'b0)
+        ) l1DataCache (
             .clk(clk),
             .reset_n(reset_n),
-            .memRead(EXMEM_memRead),
-            .memWrite(EXMEM_memWrite),
-            .address(EXMEM_aluResult),
-            .wdata(EXMEM_storeData),
-            .rdata(memReadData_MEM),
-            .cache_stall(cacheStall_MEM),
+
+            .req_valid(cacheRequestValid_MEM),
+            .req_ready(),
+            .req_write(EXMEM_memWrite),
+            .req_address(EXMEM_aluResult),
+            .req_wdata(EXMEM_storeData),
+            .resp_valid(cacheResponseValid_MEM),
+            .resp_ready(1'b1),
+            .resp_rdata(cacheResponseData_MEM),
+            
             .bus_read(1'b0),
             .bus_write(1'b0),
             .issue_bus_rd(cacheBusRd_MEM),

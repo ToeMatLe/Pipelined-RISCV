@@ -5,7 +5,8 @@
 // instruction-memory/register-file instance names, so the benchmark itself does
 // not change between runs.
 module cpu_speed_benchmark_tb #(
-  parameter bit USE_L1_CACHE = 1'b0
+  parameter bit USE_L1_CACHE = 1'b0,
+  parameter bit ENABLE_FORWARDING = 1'b1
 );
 
   localparam time CLK_PERIOD = 10ns;
@@ -17,11 +18,13 @@ module cpu_speed_benchmark_tb #(
   logic reset_n = 1'b0;
 
   int unsigned cycle_count = 0;
+  int unsigned data_hazard_stall_count = 0;
 
   always #(CLK_PERIOD / 2) clk = ~clk;
 
   DataPath #(
-    .USE_L1_CACHE(USE_L1_CACHE)
+    .USE_L1_CACHE(USE_L1_CACHE),
+    .ENABLE_FORWARDING(ENABLE_FORWARDING)
   ) dut (
     .clk     (clk),
     .reset_n (reset_n)
@@ -102,10 +105,14 @@ module cpu_speed_benchmark_tb #(
   // Count CPU clocks, not simulator wall-clock runtime. The count starts at the
   // first active clock edge after reset is released.
   always @(posedge clk) begin
-    if (!reset_n)
+    if (!reset_n) begin
       cycle_count <= 0;
-    else
+      data_hazard_stall_count <= 0;
+    end else begin
       cycle_count <= cycle_count + 1;
+      if (dut.loadUseStall)
+        data_hazard_stall_count <= data_hazard_stall_count + 1;
+    end
   end
 
   initial begin : load_program
@@ -170,8 +177,10 @@ module cpu_speed_benchmark_tb #(
 
         $display("--------------------------------------------------");
         $display("CPU BENCHMARK PASSED");
+        $display("Forwarding enabled    : %0d", ENABLE_FORWARDING);
         $display("Dynamic instructions : %0d", DYNAMIC_INSTRUCTIONS);
         $display("Measured cycles       : %0d", cycle_count);
+        $display("Data-hazard stalls    : %0d", data_hazard_stall_count);
         $display("CPI                   : %0.3f",
                  real'(cycle_count) / real'(DYNAMIC_INSTRUCTIONS));
         $display("RTL clock period      : %0t", CLK_PERIOD);
