@@ -1,0 +1,33 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date         : Sun Oct 11 18:06:28 2026
+| Host         : Thomas_Laptop running 64-bit major release  (build 9200)
+| Command      : report_utilization -hierarchical -hierarchical_depth 3 -file C:/Users/2005t/Documents/RISCV/RISCV_pipelined/Pipelined-RISCV/build/vivado/reports/post_synth_utilization.rpt
+| Design       : DataPath
+| Device       : xc7a35tcpg236-1
+| Speed File   : -1
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++----------------------------+----------------+------------+------------+---------+------+------+--------+--------+------------+
+|          Instance          |     Module     | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | DSP Blocks |
++----------------------------+----------------+------------+------------+---------+------+------+--------+--------+------------+
+| DataPath                   |          (top) |       1936 |       1376 |     560 |    0 | 1240 |      0 |      0 |          0 |
+|   (DataPath)               |          (top) |        454 |        454 |       0 |    0 |  492 |      0 |      0 |          0 |
+|   dataMem                  |        DataMem |        544 |         32 |     512 |    0 |    0 |      0 |      0 |          0 |
+|   gen_l1_cache.l1DataCache |    L1DataCache |        390 |        390 |       0 |    0 |  716 |      0 |      0 |          0 |
+|   programCounter           | ProgramCounter |        423 |        423 |       0 |    0 |   32 |      0 |      0 |          0 |
+|   registerFile             |   RegisterFile |        125 |         77 |      48 |    0 |    0 |      0 |      0 |          0 |
++----------------------------+----------------+------------+------------+---------+------+------+--------+--------+------------+
+
+

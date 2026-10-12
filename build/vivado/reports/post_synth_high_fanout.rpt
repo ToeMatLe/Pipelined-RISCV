@@ -1,0 +1,42 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date         : Sun Oct 11 18:07:27 2026
+| Host         : Thomas_Laptop running 64-bit major release  (build 9200)
+| Command      : report_high_fanout_nets -max_nets 20 -file C:/Users/2005t/Documents/RISCV/RISCV_pipelined/Pipelined-RISCV/build/vivado/reports/post_synth_high_fanout.rpt
+| Design       : DataPath
+| Device       : xc7a35t
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+High Fan-out Nets Information
+
+1. Summary
+----------
+
++-----------------------------------------------------------+--------+-------------+
+| Net Name                                                  | Fanout | Driver Type |
++-----------------------------------------------------------+--------+-------------+
+| gen_l1_cache.l1DataCache/reset_n                          |   1240 | LUT1        |
+| gen_l1_cache.l1DataCache/backing_address[3]               |    785 | FDCE        |
+| gen_l1_cache.l1DataCache/backing_address[4]               |    657 | FDCE        |
+| gen_l1_cache.l1DataCache/backing_address[0]               |    581 | FDCE        |
+| gen_l1_cache.l1DataCache/backing_address[1]               |    529 | FDCE        |
+| gen_l1_cache.l1DataCache/backing_address[2]               |    529 | FDCE        |
+| gen_l1_cache.l1DataCache/E[0]                             |    401 | LUT3        |
+| gen_l1_cache.l1DataCache/IDEX_pc1                         |    192 | LUT2        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[4]_rep__0_0[2] |    148 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[4]_rep__1_0[0] |    148 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[4]_rep_0[0]    |    148 | FDCE        |
+| gen_l1_cache.l1DataCache/A[2]                             |    144 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[4]_rep__0_0[0] |    140 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[3]_rep__1_0[1] |    140 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[4]_rep__0_0[1] |    140 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[3]_rep__1_0[0] |    140 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[3]_rep_0[0]    |    138 | FDCE        |
+| gen_l1_cache.l1DataCache/req_address_q_reg[3]_rep_0[1]    |    138 | FDCE        |
+| gen_l1_cache.l1DataCache/A[0]                             |    131 | FDCE        |
+| gen_l1_cache.l1DataCache/A[1]                             |    131 | FDCE        |
++-----------------------------------------------------------+--------+-------------+
+
+
