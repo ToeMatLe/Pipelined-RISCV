@@ -96,13 +96,14 @@ puts "INFO: Flow mode    = $flow_mode"
 puts "INFO: Reports      = $report_dir"
 
 # Read SystemVerilog and make typedef.svh visible to every source file.
-read_verilog -sv -include_dirs [list $repo_root] $rtl_files
+read_verilog -sv $rtl_files
 
 # Flattening with 'rebuilt' lets Vivado optimize across module boundaries while
 # reconstructing useful hierarchy names for reports and schematic debugging.
 synth_design \
     -top $top_module \
     -part $fpga_part \
+    -include_dirs [list $repo_root] \
     -flatten_hierarchy rebuilt
 
 # The CPU has one primary clock. A 10 ns period means a 100 MHz target.

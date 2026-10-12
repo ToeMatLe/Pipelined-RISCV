@@ -12,7 +12,10 @@ module DataPath #(
     parameter bit ENABLE_FORWARDING = 1'b1
 ) (
     input logic clk,
-    input logic reset_n
+    input logic reset_n,
+    output logic [31:0] debug_pc,
+    output logic [31:0] debug_writeback_data,
+    output logic debug_writeback_valid
 );
 
 // -----------------------------------------------------------------------------------------------------------------------
@@ -566,4 +569,8 @@ always_comb begin
         default: writeBackData = MEMWB_aluResult;
     endcase
 end
+assign debug_pc              = pcAddress_IF;
+assign debug_writeback_data  = writeBackData;
+assign debug_writeback_valid = regWrite_WB;
+
 endmodule
